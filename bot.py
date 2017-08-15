@@ -9,6 +9,8 @@ import re
 import requests
 import os
 import logging
+import json
+import stat
 
 commented_path = os.path.join(os.getcwd(),"commented.txt")
 apikey_path = os.path.join(os.getcwd(),"apikey.txt")
@@ -64,6 +66,8 @@ def buildComment(channel_name, items):
 	s += footer
 	return s
 
+def buildSubList(reddit):
+	bottiquette = reddit.get_wiki_page('Bottiquette', 'robots_txt_json')
 
 def run_bot(reddit):
 	logging.info("Getting 250 comments...")
