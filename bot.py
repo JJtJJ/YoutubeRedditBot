@@ -8,6 +8,7 @@ import time
 import re
 import requests
 import os
+import logging
 
 commented_path = os.path.join(os.getcwd(),"commented.txt")
 apikey_path = os.path.join(os.getcwd(),"apikey.txt")
@@ -21,9 +22,9 @@ footer = '\n---\n^(Bot created by /u/JeffJefftyJeffJeff | )[^(Source Code)](http
 
 def authenticate():
 	# Authenticate this bot
-	print('Authenticating...\n')
+	logging.info('Authenticating...')
 	reddit = praw.Reddit('YoutubeRedditBot', user_agent = 'web:youtube-reddit-bot:v0.1 (by /u/JeffJefftyJeffJeff)')
-	print('Authenticated as {}\n'.format(reddit.user.me()))
+	logging.info('Authenticated as {}'.format(reddit.user.me()))
 	return reddit
 
 def getYoutubeData(channel_name):
@@ -65,12 +66,12 @@ def buildComment(channel_name, items):
 
 
 def run_bot(reddit):
-	print("Getting 250 comments...\n")
+	logging.info("Getting 250 comments...")
 
 	for comment in reddit.subreddit('test').comments(limit = 250):
 		match = re.findall("!youtube\s+.*", comment.body)
 		if match:
-			print("Found invocation in comment id: " + comment.id)
+			logging.info("Found invocation in comment id: " + comment.id)
 			inv = match[0]
 			channel_name = inv.partition(' ')[-1]
 
@@ -78,26 +79,29 @@ def run_bot(reddit):
 			commented = True
 
 			if comment.id not in comment_file_r.read().splitlines():
-				print('new invocation; running...\n')
+				logging.info('new invocation; running...\n')
 				
 				try:
 					title, data = getYoutubeData(channel_name)
-				except:
-					print('Exception!!!')
+				except Exception as err:
+					logging.exception('{}: {}'.format(type(err), err))
 					commented = False
 				else:
 					data = map(prettifyItem, parseData(data))
 					reply = buildComment(title, data)
-					print(reply)
+					logging.info(reply)
 
 					try:
 						comment.reply(reply)
 					except praw.exceptions.APIException as err:
-						print(err.error_type)
+						logging.exception('{}: {}'.format(type(err), err))
 						if err.error_type == 'RATELIMIT':
 							commented = False
+					except Exception as err:
+						logging.exception('{}: {}'.format(type(err), err))
+						
 			else:
-				print('already replied\n')
+				logging.info('already replied')
 				commented = False
 
 			comment_file_r.close()
@@ -109,11 +113,13 @@ def run_bot(reddit):
 
 			time.sleep(10)
 
-	print('waiting 60s...')
+	logging.info('waiting 60s...')
 	time.sleep(60)
 
 
 def main():
+	logging.basicConfig(level=logging.DEBUG, filename="logfile", filemode="a+",
+		format="%(asctime)-15s %(levelname)-8s %(message)s")
 	reddit = authenticate()
 	while True:
 		run_bot(reddit)
