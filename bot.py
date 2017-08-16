@@ -14,6 +14,7 @@ import stat
 
 commented_path = os.path.join(os.getcwd(),"commented.txt")
 apikey_path = os.path.join(os.getcwd(),"apikey.txt")
+robots_path = os.path.join(os.getcwd(),"robots.txt")
 
 channel_api_url = 'https://www.googleapis.com/youtube/v3/channels'
 search_api_url = 'https://www.googleapis.com/youtube/v3/search'
@@ -22,12 +23,15 @@ header = '#**Top videos for channel {}**\n'
 video_line = '* [{}](https://youtube.com/watch?v={})\n'
 footer = '\n---\n^(Bot created by /u/JeffJefftyJeffJeff | )[^(Source Code)](https://github.com/JJtJJ/YoutubeRedditBot)'
 
+DAY_IN_SECONDS = 86400
+
 def authenticate():
 	# Authenticate this bot
 	logging.info('Authenticating...')
 	reddit = praw.Reddit('YoutubeRedditBot', user_agent = 'web:youtube-reddit-bot:v0.1 (by /u/JeffJefftyJeffJeff)')
 	logging.info('Authenticated as {}'.format(reddit.user.me()))
 	return reddit
+
 
 def getYoutubeData(channel_name):
 	key = getApiKey()
@@ -44,9 +48,11 @@ def getYoutubeData(channel_name):
 	list_json = r.json()
 	return channel_name, list_json
 
+
 def parseData(channel_data):
 	items = channel_data["items"][:5]
 	return items
+
 
 def getApiKey():
 	with open(apikey_path) as file:
@@ -55,9 +61,11 @@ def getApiKey():
 			if name == 'key':
 				return var
 
+
 def prettifyItem(item):
 	s = video_line.format(item["snippet"]["title"], item["id"]["videoId"])
 	return s
+
 
 def buildComment(channel_name, items):
 	s = header.format(channel_name) + '---\n'
@@ -66,14 +74,37 @@ def buildComment(channel_name, items):
 	s += footer
 	return s
 
+
+def getSubList(reddit):
+	bottiquette = reddit.subreddit('Bottiquette').wiki['robots_txt_json']
+	bans = json.loads(bottiquette.content_md)
+
+	with open(robots_path, 'w') as robots_w:
+		json.dump(bans, robots_w)
+
+
 def buildSubList(reddit):
-	bottiquette = reddit.get_wiki_page('Bottiquette', 'robots_txt_json')
+	if time.time() - os.stat(robots_path)[stat.ST_MTIME] > DAY_IN_SECONDS:
+		logging.info('refreshing robots.txt')
+		getSubList(reddit)
+
+	with open(robots_path) as robots_r:
+		bans = json.load(robots_r)
+
+	sub_list = 'all'
+	for ban in bans["disallowed"] + bans["permission"] + bans["posts-only"]:
+		sub_list += '-{}'.format(ban)
+
+	return sub_list
+	
 
 def run_bot(reddit):
-	logging.info("Getting 250 comments...")
+	logging.info("Getting comments...")
 
-	for comment in reddit.subreddit('test').comments(limit = 250):
-		match = re.findall("!youtube\s+.*", comment.body)
+	sub_list = buildSubList(reddit)
+	subs = reddit.subreddit(sub_list)
+	for comment in subs.comments(limit = 1000):
+		match = re.findall("!(?i)youtube\s+.*", comment.body)
 		if match:
 			logging.info("Found invocation in comment id: " + comment.id)
 			inv = match[0]
@@ -110,6 +141,7 @@ def run_bot(reddit):
 
 			comment_file_r.close()
 
+			commented = False
 			if commented:
 				comment_file_w = open(commented_path, 'a+')
 				comment_file_w.write(comment.id + '\n')
@@ -125,6 +157,7 @@ def main():
 	logging.basicConfig(level=logging.DEBUG, filename="logfile", filemode="a+",
 		format="%(asctime)-15s %(levelname)-8s %(message)s")
 	reddit = authenticate()
+	buildSubList(reddit)
 	while True:
 		run_bot(reddit)
 
